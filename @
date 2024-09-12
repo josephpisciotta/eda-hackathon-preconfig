@@ -1,0 +1,19 @@
+---
+- name: Configure
+  hosts: all
+  gather_facts: false
+  tasks:
+    - name: Make credential
+      ansible.eda.credential:
+        name: "Alertmanager"
+        inputs:
+          auth_type: "basic"
+          username: "alertmanager"
+          password: "p@ssw0rd"
+        credential_type_name: "basic"
+        organization: "Default"
+        controller_host: "{{ item.host }}"
+      loop:
+        - host: https://18.224.138.176
+          username: "admin"
+          password: "Admin!Password!Gw"
