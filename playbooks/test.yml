@@ -5,50 +5,67 @@
   tasks:
     - name: Read users from CSV file and return a dictionary
       community.general.read_csv:
-        path: "{{ playbook_dir }}/../../hackathon-org-wide-creds.csv"
+        path: "{{ playbook_dir }}/../../hackathonhosts.csv"
         key: host
         unique: false
       register: controllers
       delegate_to: localhost
     - debug: 
-        msg: "{{ controllers.dict | dict2items }}" 
-#    - name: Make credential
-#      ansible.eda.credential:
-#        name: "Alertmanager"
-#        inputs:
-#          auth_type: "basic"
-#          username: "alertmanager"
-#          password: "p@ssw0rd"
-#        credential_type_name: "basic"
-#        organization: "Default"
+        msg: "{{ controllers.dict | dict2items }}"
+        
+    - debug:
+        msg: "{{ item.value.host }}"
+      loop: "{{ controllers.dict | dict2items }}"
+      
+      
+    - name: Make credential
+      ansible.eda.credential:
+        name: "Alertmanager"
+        inputs:
+          auth_type: "basic"
+          username: "alertmanager"
+          password: "p@ssw0rd"
+        credential_type_name: "basic"
+        organization: "Default"
+        controller_host: "{{ item.value.host }}"
+        controller_username: "{{ item.value.username }}"
+        controller_password: "{{ item.value.password }}"
+        validate_certs: false
+      loop: "{{ controllers.dict | dict2items }}"
+      ignore_errors: true
+
+    - name: Make event stream
+      ansible.eda.event_stream:
+        name: "Alertmanager"
+        credential_name: "Alertmanager"
+        organization: "Default"
+        controller_host: "{{ item.value.host }}"
+        controller_username: "{{ item.value.username }}"
+        controller_password: "{{ item.value.password }}"
+        validate_certs: false
+      loop: "{{ controllers.dict | dict2items}}"
+      register: event_stream_ids
+      ignore_errors: true
+
+    - name: print ids
+      debug:
+        msg: "{{ item }}"
+      loop: "{{ event_stream_ids.results }}"
+
+#    - name: Get information about a event stream
+#      ansible.eda.event_stream_info:
+#        id: 1
 #        controller_host: "{{ item.value.host }}"
 #        controller_username: "{{ item.value.username }}"
 #        controller_password: "{{ item.value.password }}"
 #        validate_certs: false
 #      loop: "{{ controllers.dict | dict2items }}"
+#      register: event_stream_info
 #      ignore_errors: true
-
-#    - name: Make event stream
-#      ansible.eda.event_stream:
-#        name: "Alertmanager"
-#        credential_name: "Alertmanager"
-#        organization: "Default"
-#        controller_host: "{{ item.value.host }}"
-#        controller_username: "{{ item.value.username }}"
-#        controller_password: "{{ item.value.password }}"
-#        validate_certs: false
-#      loop: "{{ controllers.dict | dict2items}}"
-#      register: event_stream_ids
-#      ignore_errors: true
-
-#    - name: print ids
-#      debug:
-#        msg: "{{ item }}"
-#      loop: "{{ event_stream_ids }}"
-
+      
     - name: Get information about a event stream
       ansible.eda.event_stream_info:
-        id: 1
+        name: Alertmanager
         controller_host: "{{ item.value.host }}"
         controller_username: "{{ item.value.username }}"
         controller_password: "{{ item.value.password }}"
@@ -56,17 +73,6 @@
       loop: "{{ controllers.dict | dict2items }}"
       register: event_stream_info
       ignore_errors: true
-      
-#    - name: Get information about a event stream
-#      ansible.eda.event_stream_info:
-#        id: 1
-#        controller_host: "{{ (controllers.dict | dict2items)[0].value.host }}"
-#        controller_username: "{{ (controllers.dict | dict2items)[0].value.username }}"
-#        controller_password: "{{ (controllers.dict | dict2items)[0].value.password }}"
-#        validate_certs: false
-##      loop: "{{ (controllers.dict | dict2items)[0] }}"
-#      register: event_stream_info
-#      ignore_errors: true
 #      
     - name: print info
       debug:
@@ -75,15 +81,33 @@
       loop: "{{ event_stream_info.results }}"
       ignore_errors: true
       
-    - name: Update bashrc for PythonBrew for foo user
-      lineinfile:
-        dest: "{{ playbook_dir }}/output.csv"
-        line: "{{ item.event_streams[0].url }}"
-        state: present
-        insertafter: EOF
-        create: True
+      
+    - ansible.builtin.shell: for i in `relay output ls -b 41ed8f95-d4cd-4439-aeb4-b6c199e88548| awk ' { print $1 }'`; do relay output rm -b 41ed8f95-d4cd-4439-aeb4-b6c199e88548 $i; done
+      environment:
+        RELAY_KEY=3c2760da-017f-4efa-998c-f4b5a6ce6023
+        RELAY_SECRET=X7wRW0vtg19E
+      
+    - ansible.builtin.shell: /usr/local/bin/relay output create --type public --header 'Authorization=Basic YWxlcnRtYW5hZ2VyOnBAc3N3MHJk' --bucket 41ed8f95-d4cd-4439-aeb4-b6c199e88548 -d {{ item.event_streams[0].url }} {{ item.event_streams[0].url }}
       when: "item.event_streams is defined and item.event_streams | length>0"
       loop: "{{ event_stream_info.results }}"
+      delegate_to: localhost
+      environment:
+        RELAY_KEY=3c2760da-017f-4efa-998c-f4b5a6ce6023
+        RELAY_SECRET=X7wRW0vtg19E
+    
+#- ansible.builtin.shell: relay output create --type public --header 'Authorization=Basic YWxlcnRtYW5hZ2VyOnBAc3N3MHJk' --bucket 41ed8f95-d4cd-4439-aeb4-b6c199e88548 {{ item.event_streams[0].url }}
+#    when: "item.event_streams is defined and item.event_streams | length>0"
+#    loop: "{{ event_stream_info.results }}"
+#    delegate_to: localhost
+      
+#    - lineinfile:
+#        dest: "{{ playbook_dir }}/output.csv"
+#        line: "{{ item.event_streams[0].url }}"
+#        state: present
+#        insertafter: EOF
+#        create: True
+#      when: "item.event_streams is defined and item.event_streams | length>0"
+#      loop: "{{ event_stream_info.results }}"
       
 
 
